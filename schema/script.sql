@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS series (
     id bigint primary key generated always as identity,
     title text not null,
     description text,
-    poster_url text,
+    poster_path text,
     path text not null
     create_at timestamp with time zone default now(),
 );
