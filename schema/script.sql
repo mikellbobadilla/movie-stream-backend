@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS series (
     title text not null,
     description text,
     poster_path text,
-    path text not null
-    create_at timestamp with time zone default now(),
+    path text,
+    create_at timestamp with time zone default now()
 );
 
 -- Season table
