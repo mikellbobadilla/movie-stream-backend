@@ -5,11 +5,14 @@ import ar.mikellbobadilla.app.genre.GenreRepository;
 import ar.mikellbobadilla.app.utils.StorageUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Date;
@@ -36,6 +39,18 @@ public class SerieService {
                 .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
     }
 
+    public Resource getPosterFile(Long serieId) {
+        String posterPath = serieRepository.getPosterPathById(serieId)
+                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+        /* /{rootPath}/series/poster.jpg */
+        Path location = Paths.get(rootPath, posterPath);
+        try {
+            return new UrlResource(location.toUri());
+        } catch (MalformedURLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Transactional(rollbackFor = {})
     public SerieResponse createSerie(SerieRequest request) {
         var genres = genreRepository.findAllByNameIgnoreCaseIn(request.genres());
@@ -54,6 +69,55 @@ public class SerieService {
         return buildResponse(serieRepository.save(savedSerie));
     }
 
+    @Transactional(rollbackFor = {})
+    public void updateSerie(Long serieId, SerieRequest request) {
+        Serie serie = serieRepository.findById(serieId)
+                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+        var genres = genreRepository.findAllByNameIgnoreCaseIn(request.genres());
+        serie.setTitle(request.title());
+        serie.setDescription(request.description());
+        serie.setGenres(genres);
+        String oldPosterPath = serie.getPosterPath();
+        String newPosterPath = savePoster(Paths.get(serie.getPath()), request.posterFile());
+        serie.setPosterPath(newPosterPath);
+        serieRepository.save(serie);
+        removeResource(oldPosterPath);
+    }
+
+    @Transactional(rollbackFor = {})
+    public void deleteSerie(Long serieId) {
+        String seriePath = serieRepository.getSeriePathById(serieId)
+                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+        Path targetPath = Paths.get(rootPath, seriePath);
+        serieRepository.deleteById(serieId);
+        StorageUtils.forceDeleteDir(targetPath.toFile());
+    }
+
+    @Transactional(rollbackFor = {})
+    public void updateSeriePoster(Long serieId, MultipartFile posterFile) {
+        var seriePaths = serieRepository.getLocationPaths(serieId)
+                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+        String oldPosterPath = seriePaths.getPosterPath();
+        String newPosterPath = savePoster(Paths.get(seriePaths.getPath()), posterFile);
+        serieRepository.setPosterPathById(newPosterPath, serieId);
+        removeResource(oldPosterPath);
+    }
+
+    private List<SerieResponse> buildResponse(List<Serie> series) {
+        return series.stream().map(this::buildResponse).toList();
+    }
+
+    private SerieResponse buildResponse(Serie serie) {
+        String posterUrl = hostUrl + "/" + serie.getPath() + "/poster";
+        return new SerieResponse(
+            serie.getId(),
+            serie.getTitle(),
+            serie.getDescription(),
+            posterUrl,
+            serie.getGenres()
+        );
+    }
+
     private void removeResource(String posterPath) {
         Path locationDir = Paths.get(rootPath, posterPath);
         StorageUtils.deleteResource(locationDir);
@@ -70,41 +134,4 @@ public class SerieService {
         return posterPath.toString().replace("\\", "/");
     }
 
-    @Transactional(rollbackFor = {})
-    public void updateSerie(Long serieId, SerieRequest request) {
-        var genres = genreRepository.findAllByNameIgnoreCaseIn(request.genres());
-        Serie serie = serieRepository.findById(serieId)
-                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
-        serie.setTitle(request.title());
-        serie.setDescription(request.description());
-        serie.setGenres(genres);
-        removeResource(serie.getPosterPath());
-        String posterPath = savePoster(Paths.get(serie.getPath()), request.posterFile());
-        serie.setPosterPath(posterPath);
-        serieRepository.save(serie);
-    }
-
-    @Transactional(rollbackFor = {})
-    public void deleteSerie(Long serieId) {
-        Serie serie = serieRepository.findById(serieId)
-                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
-        Path targetPath = Paths.get(rootPath, serie.getPath());
-        StorageUtils.forceDeleteDir(targetPath.toFile());
-        serieRepository.deleteById(serieId);
-    }
-
-    private List<SerieResponse> buildResponse(List<Serie> series) {
-        return series.stream().map(this::buildResponse).toList();
-    }
-
-    private SerieResponse buildResponse(Serie serie) {
-        String posterUrl = hostUrl + "/" + serie.getPosterPath();
-        return new SerieResponse(
-            serie.getId(),
-            serie.getTitle(),
-            serie.getDescription(),
-            posterUrl,
-            serie.getGenres()
-        );
-    }
 }
