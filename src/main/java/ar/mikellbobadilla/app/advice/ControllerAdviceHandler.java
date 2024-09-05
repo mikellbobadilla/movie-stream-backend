@@ -27,6 +27,7 @@ public class ControllerAdviceHandler {
     @ExceptionHandler(RuntimeException.class)
     @ResponseStatus(INTERNAL_SERVER_ERROR)
     ErrorResponse runtimeExcHandler(RuntimeException exc) {
+        exc.printStackTrace();
         return responseBuilder(INTERNAL_SERVER_ERROR, "Server error");
     }
 
