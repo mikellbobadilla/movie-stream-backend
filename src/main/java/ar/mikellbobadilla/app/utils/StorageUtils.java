@@ -4,10 +4,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.nio.file.StandardOpenOption.CREATE_NEW;
 
 public class StorageUtils {
@@ -21,8 +23,8 @@ public class StorageUtils {
     }
 
     public static void saveResource(Path posterPath, MultipartFile file) {
-        try {
-            Files.write(posterPath, file.getBytes(), CREATE_NEW);
+        try(InputStream inputStream = file.getInputStream()) {
+            Files.copy(inputStream, posterPath, REPLACE_EXISTING);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
