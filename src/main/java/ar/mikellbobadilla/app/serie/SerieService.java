@@ -21,6 +21,7 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class SerieService {
+    public static final String NOT_FOUND = "No such serie";
     private final GenreRepository genreRepository;
     private final SerieRepository serieRepository;
 
@@ -29,30 +30,31 @@ public class SerieService {
     @Value("${server.host.url}")
     private String hostUrl;
 
-    public List<SerieResponse> getSeries() {
-        return buildResponse(serieRepository.findAll(Sort.by("title").ascending()));
+    public List<SerieSummaryResponse> getSeries() {
+        Sort sort = Sort.by("title").ascending();
+        return buildSummaryResponse(serieRepository.findAll(sort));
     }
 
-    public SerieResponse getSerie(Long serieId) {
+    public SerieDetailResponse getSerie(Long serieId) {
         return serieRepository.findById(serieId)
                 .map(this::buildResponse)
-                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+                .orElseThrow(() -> new ResourceNotFoundException(NOT_FOUND));
     }
 
     public Resource getPosterFile(Long serieId) {
         String posterPath = serieRepository.getPosterPathById(serieId)
-                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+                .orElseThrow(() -> new ResourceNotFoundException(NOT_FOUND));
         /* /{rootPath}/series/poster.jpg */
         Path location = Paths.get(rootPath, posterPath);
         try {
             return new UrlResource(location.toUri());
-        } catch (MalformedURLException e) {
-            throw new RuntimeException(e);
+        } catch (MalformedURLException exc) {
+            throw new RuntimeException(exc);
         }
     }
 
     @Transactional(rollbackFor = {})
-    public SerieResponse createSerie(SerieRequest request) {
+    public SerieDetailResponse createSerie(SerieRequest request) {
         var genres = genreRepository.findAllByNameIgnoreCaseIn(request.genres());
         Serie savedSerie = serieRepository.save(Serie.builder()
                 .title(request.title())
@@ -62,7 +64,7 @@ public class SerieService {
                 .build()
         );
         /* /series/{id} */
-        Path seriePath = Paths.get("series", String.valueOf(savedSerie.getId()));
+        Path seriePath = Paths.get("series", savedSerie.getId().toString());
         String posterPath = savePoster(seriePath, request.posterFile());
         savedSerie.setPath(seriePath.toString().replace("\\", "/"));
         savedSerie.setPosterPath(posterPath);
@@ -72,7 +74,7 @@ public class SerieService {
     @Transactional(rollbackFor = {})
     public void updateSerie(Long serieId, SerieRequest request) {
         Serie serie = serieRepository.findById(serieId)
-                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+                .orElseThrow(() -> new ResourceNotFoundException(NOT_FOUND));
         var genres = genreRepository.findAllByNameIgnoreCaseIn(request.genres());
         serie.setTitle(request.title());
         serie.setDescription(request.description());
@@ -87,7 +89,7 @@ public class SerieService {
     @Transactional(rollbackFor = {})
     public void deleteSerie(Long serieId) {
         String seriePath = serieRepository.getSeriePathById(serieId)
-                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+                .orElseThrow(() -> new ResourceNotFoundException(NOT_FOUND));
         Path targetPath = Paths.get(rootPath, seriePath);
         serieRepository.deleteById(serieId);
         StorageUtils.forceDeleteDir(targetPath.toFile());
@@ -96,28 +98,14 @@ public class SerieService {
     @Transactional(rollbackFor = {})
     public void updateSeriePoster(Long serieId, MultipartFile posterFile) {
         var seriePaths = serieRepository.getLocationPaths(serieId)
-                .orElseThrow(() -> new ResourceNotFoundException("No such serie"));
+                .orElseThrow(() -> new ResourceNotFoundException(NOT_FOUND));
         String oldPosterPath = seriePaths.getPosterPath();
         String newPosterPath = savePoster(Paths.get(seriePaths.getPath()), posterFile);
         serieRepository.setPosterPathById(newPosterPath, serieId);
         removeResource(oldPosterPath);
     }
 
-    private List<SerieResponse> buildResponse(List<Serie> series) {
-        return series.stream().map(this::buildResponse).toList();
-    }
-
-    private SerieResponse buildResponse(Serie serie) {
-        String posterUrl = hostUrl + "/" + serie.getPath() + "/poster";
-        return new SerieResponse(
-            serie.getId(),
-            serie.getTitle(),
-            serie.getDescription(),
-            posterUrl,
-            serie.getGenres()
-        );
-    }
-
+    /* ################################ Private Methods ################################ */
     private void removeResource(String posterPath) {
         Path locationDir = Paths.get(rootPath, posterPath);
         StorageUtils.deleteResource(locationDir);
@@ -127,11 +115,34 @@ public class SerieService {
         /* /{rootPath} */
         Path locationDir = Paths.get(rootPath);
         StorageUtils.createDir(locationDir.resolve(seriePath));
-        String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
+        String filename = System.currentTimeMillis() + "_" + file.getOriginalFilename();
         /* /series/{serieId}/{fileName} */
-        Path posterPath = seriePath.resolve(fileName);
+        Path posterPath = seriePath.resolve(filename);
         StorageUtils.saveResource(locationDir.resolve(posterPath), file);
         return posterPath.toString().replace("\\", "/");
     }
 
+    /* ################################ Builders ################################ */
+    private List<SerieSummaryResponse> buildSummaryResponse(List<Serie> series) {
+        return series.stream().map(this::buildSummaryResponse).toList();
+    }
+
+    private SerieSummaryResponse buildSummaryResponse(Serie serie) {
+        /* /{hostUrl}/series/{serieId}/poster */
+        String posterUrl = hostUrl + "/" + serie.getPath() + "/poster";
+        return new SerieSummaryResponse(serie.getId(), serie.getTitle(), posterUrl);
+    }
+
+    private List<SerieDetailResponse> buildResponse(List<Serie> series) {
+        return series.stream().map(this::buildResponse).toList();
+    }
+
+    private SerieDetailResponse buildResponse(Serie serie) {
+        /* /{hostUrl}/series/{serieId}/poster */
+        String posterUrl = hostUrl + "/" + serie.getPath() + "/poster";
+        return new SerieDetailResponse(
+                serie.getId(), serie.getTitle(), serie.getDescription(),
+                posterUrl, serie.getGenres()
+        );
+    }
 }

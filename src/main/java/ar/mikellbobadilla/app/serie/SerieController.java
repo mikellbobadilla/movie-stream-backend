@@ -21,13 +21,13 @@ public class SerieController {
 
     @GetMapping
     @ResponseStatus(OK)
-    List<SerieResponse> getSeries() {
+    List<SerieSummaryResponse> getAll() {
         return service.getSeries();
     }
 
     @GetMapping("/{serieId}")
     @ResponseStatus(OK)
-    SerieResponse getSerie(@PathVariable Long serieId) {
+    SerieDetailResponse getSerie(@PathVariable Long serieId) {
         return service.getSerie(serieId);
     }
 
@@ -44,7 +44,7 @@ public class SerieController {
 
     @PostMapping
     @ResponseStatus(CREATED)
-    SerieResponse postSerie(@ModelAttribute SerieRequest request) {
+    SerieDetailResponse postSerie(@ModelAttribute SerieRequest request) {
         return service.createSerie(request);
     }
 
