@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS seasons (
     season_number int not null check (season_number > 0),
     title text,
     description text,
+    path text,
     create_at timestamp with time zone default now()
 );
 
@@ -32,7 +33,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     description text,
     episode_number int not null,
     file_path text,
-    created_at timestamp with time zone default now()
+    create_at timestamp with time zone default now()
 );
 
 -- Serie Genre table
